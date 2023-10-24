@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사고 데이터 시각화</title>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <style>
+        /* 지도 스타일 */
+        path {
+            stroke: white;
+            stroke-width: 0.5;
+            fill: #dcdcdc; /* 기본 색상: 연한 회색 */
+        }
+    </style>
+</head>
+<body>
+    <!-- 연도 선택 드롭다운 -->
+    <select id="yearSelect" onchange="loadBaseData()">
+        <option value="2020">2020</option>
+        <option value="2021">2021</option>
+        <option value="2022">2022</option>
+    </select>
+
+    <!-- 카테고리 선택 드롭다운 -->
+    <select id="categorySelect" onchange="updateVisualization()">
+        <option value="부위별">부위별</option>
+        <option value="사고당시활동">사고당시활동</option>
+        <option value="시간별">시간별</option>
+        <option value="장소별">장소별</option>
+        <option value="형태별">형태별</option>
+    </select>
+
+    <!-- 지도를 그릴 SVG 영역 -->
+    <svg width="800" height="600" id="map"></svg>
+
+    <script>
+        const svg = d3.select("#map");
+        let baseData = null; // 연도별 기본 데이터 저장 변수
+        let categoryData = null; // 카테고리별 데이터 저장 변수
+
+        // 대한민국 지도 데이터 로드
+        d3.json("TL_SCCO_CTPRVN.json").then(data => {
+            const projection = d3.geoMercator().fitSize([800, 600], data);
+            const path = d3.geoPath().projection(projection);
+
+            svg.selectAll("path")
+                .data(data.features)
+                .enter().append("path")
+                .attr("d", path);
+        });
+
+        // 연도 변경 시 기본 데이터 로드 함수
+        function loadBaseData() {
+            const selectedYear = document.getElementById("yearSelect").value;
+            const baseCsvFilePath = `${selectedYear}/${selectedYear}사고발생데이터_수정.csv`;
+
+            d3.csv(baseCsvFilePath).then(data => {
+                baseData = data;
+                // 기본 데이터를 기반으로 한 시각화 업데이트 로직 (추후 추가)
+                updateVisualization();
+            });
+        }
+
+        // 색상 척도 설정
+        const colorScale = d3.scaleQuantize().range(d3.schemeBlues[9]);
+
+        // 카테고리 변경 시 시각화 업데이트 함수
+        function updateVisualization() {
+            const selectedYear = document.getElementById("yearSelect").value;
+            const selectedCategory = document.getElementById("categorySelect").value;
+            const categoryCsvFilePath = `${selectedYear}/${selectedCategory}_${selectedYear}년 학교안전사고 사고발생 현황.csv`;
+
+            // 선택된 카테고리와 연도에 따른 CSV 파일 로드
+            d3.csv(categoryCsvFilePath).then(data => {
+                // 지역별로 발생 카운트 집계
+                const regionCounts = {};
+                data.forEach(d => {
+                    if (regionCounts[d.지역]) {
+                        regionCounts[d.지역]++;
+                    } else {
+                        regionCounts[d.지역] = 1;
+                    }
+                });
+
+                // 색상 척도의 도메인 설정
+                const maxCount = Math.max(...Object.values(regionCounts));
+                colorScale.domain([0, maxCount]);
+
+                // 지도의 색상 업데이트
+                svg.selectAll("path")
+                    .style("fill", d => {
+                        const regionName = d.properties.CTP_KOR_NM;
+                        return colorScale(regionCounts[regionName] || 0); // 해당 지역의 카운트에 따른 색상, 데이터가 없는 경우 0 처리
+                    });
+            });
+        }
+
+        // 초기 데이터 로드
+        loadBaseData();
+
+    </script>
+</body>
+</html>
