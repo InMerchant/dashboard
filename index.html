@@ -9,14 +9,38 @@
         /* 지도 스타일 */
         path {
             stroke: white;
-            stroke-width: 0.5;
-            fill: #dcdcdc; /* 기본 색상: 연한 회색 */
+        }
+        /* 툴팁 스타일*/
+        .tooltip {
+            position: absolute;
+            z-index: 10;
+            visibility: hidden;
+            background: #ffffff;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            pointer-events: none;  /* 툴팁 위에서 마우스 이벤트를 무시 */
+        }
+        #yearSelect, #categorySelect {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10; /*지도 위에 표시*/
+        }
+        #map, #barGraph, #pieChart {
+            display: inline-block; /* 옆으로 배열 */
+            vertical-align: top; /* 상단 정렬 */
+        }
+        #visualizationContainer {
+            margin-top: 40px; /* 드롭다운 아래에 위치하도록 여백 설정 */
         }
     </style>
 </head>
 <body>
     <!-- 연도 선택 드롭다운 -->
     <select id="yearSelect" onchange="loadBaseData()">
+        <option value="선택">선택</option>
         <option value="2020">2020</option>
         <option value="2021">2021</option>
         <option value="2022">2022</option>
@@ -24,6 +48,7 @@
 
     <!-- 카테고리 선택 드롭다운 (초기에 숨김) -->
     <select id="categorySelect" onchange="updateVisualization()" style="display: none;">
+        <option value="선택">선택</option>
         <option value="부위별">부위별</option>
         <option value="사고당시활동">사고당시활동</option>
         <option value="시간별">시간별</option>
@@ -31,11 +56,31 @@
         <option value="형태별">형태별</option>
     </select>
 
-    <!-- 지도를 그릴 SVG 영역 -->
-    <svg width="800" height="600" id="map"></svg>
+    <div id="visualizationContainer">
+        <!-- 지도를 그릴 SVG 영역 -->
+        <svg width="800" height="600" id="map"></svg>
+    
+        <!-- 막대 그래프를 그릴 SVG 영역 -->
+        <svg width="300" height="300" id="barGraph"></svg>
+    
+        <!-- 원형 그래프를 그릴 SVG 영역 -->
+        <svg width="400" height="400" id="pieChart"></svg>
+    </div>
 
     <script>
+        // 툴팁 추가
+        const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("position", "absolute")
+        .style("z-index", "10")
+        .style("visibility", "hidden")
+        .style("background", "#FFFFFF")
+        .style("padding", "8px")
+        .style("border-radius", "6px")
+        .style("border", "1px solid #ccc");
+
         const svg = d3.select("#map");
+
         let baseData = null; // 연도별 기본 데이터 저장 변수
         let categoryData = null; // 카테고리별 데이터 저장 변수
 
@@ -51,28 +96,42 @@
                 // 지도의 각 지역에 마우스 이벤트 핸들러 설정
                 .on("mouseover", handleMouseOver) // 마우스 오버 이벤트
                 .on("mouseout", handleMouseOut)   // 마우스 아웃 이벤트
-                .on("click", handleRegionClick);  // 지역 클릭 이벤트
+                .on("click", handleRegionClick)  // 지역 클릭 이벤트
+                .on("mousemove", function() {
+                    return tooltip.style("top", (d3.event.pageY-10)+"px").style("left",(d3.event.pageX+10)+"px");
+                });
         });
 
         // 마우스 오버 이벤트 핸들러
         function handleMouseOver(d) {
-        d3.select(this).style("stroke-width", "3");
+            const selectedYear = document.getElementById("yearSelect").value;
+            if (selectedYear === "선택") {
+                return; // 연도가 선택되지 않았으면 함수를 종료
+            }
+        
+            d3.select(this).style("stroke-width", "3");
+            const regionCount = baseData.filter(data => data.지역 === regionMapping[d.properties.CTP_KOR_NM]).length;
+            tooltip.text(`${d.properties.CTP_KOR_NM}: ${regionCount}명`);
+            return tooltip.style("visibility", "visible");
         }
 
         // 마우스 아웃 이벤트 핸들러
         function handleMouseOut(d) {
-        d3.select(this).style("stroke-width", "0.5");
+            d3.select(this).style("stroke-width", "0.5");
+            return tooltip.style("visibility", "hidden");
         }
 
         // 지역 클릭 이벤트 핸들러
         function handleRegionClick(d) {
             const selectedRegion = d.properties.CTP_KOR_NM;
-            console.log(`선택된 지역: ${selectedRegion}`);
+            //console.log(`선택된 지역: ${selectedRegion}`);
             document.getElementById("categorySelect").style.display = "inline"; // 카테고리 선택 드롭다운 표시
         }
 
         // 색상 척도 설정 (보간 함수를 사용하여 세분화)
         const colorScale = d3.scaleSequential(d3.interpolateReds);
+
+        const pieChartSvg = d3.select("#pieChart");
 
         // 지역명 매핑
         const regionMapping = {
@@ -95,12 +154,32 @@
             "제주특별자치도": "제주"
         };
 
+        // 초기 상태로 리셋하는 함수
+        function resetToInitialState() {
+            // 모든 지역의 색상을 초기 색상으로 재설정
+            svg.selectAll("path")
+            .style("fill", "#dcdcdc"); 
+
+            // 카테고리 선택 드롭다운 숨기기
+            document.getElementById("categorySelect").style.display = "none";
+
+            //차트 숨기기
+            pieChartSvg.selectAll('*').remove();
+        }
+
         // 연도 변경 시 기본 데이터 로드 함수
         function loadBaseData() {
-            const selectedYear = document.getElementById("yearSelect").value || "2020"; // 기본 연도 설정
-            const baseCsvFilePath = `${selectedYear}/${selectedYear}사고발생데이터_수정.csv`;
+            const selectedYear = document.getElementById("yearSelect").value;
+            
+            if (selectedYear === "선택") {
+                resetToInitialState(); // 초기 상태로 리셋
+                return;
+            }
+            //파일 읽어오기
+            const baseCsvFilePath = `${selectedYear}/${selectedYear}사고발생데이터_수정.csv`;   
 
             d3.csv(baseCsvFilePath).then(data => {
+                baseData = data;
                 // 지역별 사고 발생 빈도 집계
                 const regionCounts = {};
                 let totalCount = 0; // 전체 발생 건수
@@ -138,6 +217,76 @@
 
         // 초기 데이터 로드
         loadBaseData();
+
+        // 지역 클릭 이벤트 핸들러
+        function handleRegionClick(d) {
+            const selectedRegion = d.properties.CTP_KOR_NM;
+
+            //console.log(`선택된 지역: ${selectedRegion}`);
+
+            document.getElementById("categorySelect").style.display = "inline"; // 카테고리 선택 드롭다운 표시
+
+            // 해당 지역의 데이터 필터링
+            const regionData = baseData.filter(data => data.지역 === regionMapping[selectedRegion]);
+
+            // 남여 비율 계산
+            const genderCounts = { 남: 0, 여: 0 };
+            regionData.forEach(data => {
+                const gender = data.사고자성별;
+                genderCounts[gender]++;
+            });
+            
+            //console.log(genderCounts); // 남여 카운트 결과를 콘솔에 출력
+
+            // 원형 그래프 업데이트
+            drawPieChart(genderCounts);
+        }
+
+        // 원형 차트를 그리는 함수
+        function drawPieChart(genderCounts) {
+            pieChartSvg.selectAll('*').remove();  // 이전 차트를 삭제
+
+            const pieData = [
+                { gender: '남', count: genderCounts.남 },
+                { gender: '여', count: genderCounts.여 }
+            ];
+
+            const pie = d3.pie().value(d => d.count);
+            const arc = d3.arc().innerRadius(0).outerRadius(150);
+
+            const g = pieChartSvg.append("g")
+                .attr("transform", "translate(200, 200)");
+
+            g.selectAll("path")
+                .data(pie(pieData))
+                .enter().append("path")
+                .attr("d", arc)
+                .attr("fill", d => d.data.gender === '남' ? "#4E79A7" : "#F28E2B")  // 남: 파란색, 여: 주황색
+                .attr("stroke", "white")
+                .attr("stroke-width", "2px");
+
+            // 범례 추가
+            const legend = pieChartSvg.append("g")
+                .attr("transform", "translate(150, 0)")
+                .selectAll(".legend")
+                .data(pieData)
+                .enter().append("g")
+                .attr("class", "legend")
+                .attr("transform", (d, i) => `translate(0,${i * 20})`);
+
+            legend.append("rect")
+                .attr("x", -18)
+                .attr("width", 18)
+                .attr("height", 18)
+                .attr("fill", d => d.gender === '남' ? "#4E79A7" : "#F28E2B");
+
+            legend.append("text")
+                .attr("x", -24)
+                .attr("y", 9)
+                .attr("dy", ".35em")
+                .style("text-anchor", "end")
+                .text(d => d.gender);
+        }
 
         // 카테고리 변경 시 시각화 업데이트 함수
         function updateVisualization() {
