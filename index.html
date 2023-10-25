@@ -22,7 +22,7 @@
             font-size: 14px;
             pointer-events: none;  /* 툴팁 위에서 마우스 이벤트를 무시 */
         }
-        #yearSelect, #categorySelect {
+        #yearSelect {
             top: 10px;
             left: 10px;
             z-index: 10; /*지도 위에 표시*/
@@ -43,16 +43,6 @@
         <option value="2020">2020</option>
         <option value="2021">2021</option>
         <option value="2022">2022</option>
-    </select>
-
-    <!-- 카테고리 선택 드롭다운 (초기에 숨김) -->
-    <select id="categorySelect" onchange="updateVisualization()" style="display: none;">
-        <option value="선택">선택</option>
-        <option value="부위별">부위별</option>
-        <option value="사고당시활동">사고당시활동</option>
-        <option value="시간별">시간별</option>
-        <option value="장소별">장소별</option>
-        <option value="형태별">형태별</option>
     </select>
 
     <div id="visualizationContainer">
@@ -124,7 +114,6 @@
         function handleRegionClick(d) {
             const selectedRegion = d.properties.CTP_KOR_NM;
             //console.log(`선택된 지역: ${selectedRegion}`);
-            document.getElementById("categorySelect").style.display = "inline"; // 카테고리 선택 드롭다운 표시
         }
 
         // 색상 척도 설정 (보간 함수를 사용하여 세분화)
@@ -285,13 +274,6 @@
                 .attr("dy", ".35em")
                 .style("text-anchor", "end")
                 .text(d => d.gender);
-        }
-
-        // 카테고리 변경 시 시각화 업데이트 함수
-        function updateVisualization() {
-            const selectedYear = document.getElementById("yearSelect").value;
-            const selectedCategory = document.getElementById("categorySelect").value;
-            const categoryCsvFilePath = `${selectedYear}/${selectedCategory}_${selectedYear}년 학교안전사고 사고발생 현황.csv`;
         }
 
     </script>
