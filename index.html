@@ -22,8 +22,8 @@
         <option value="2022">2022</option>
     </select>
 
-    <!-- 카테고리 선택 드롭다운 -->
-    <select id="categorySelect" onchange="updateVisualization()">
+    <!-- 카테고리 선택 드롭다운 (초기에 숨김) -->
+    <select id="categorySelect" onchange="updateVisualization()" style="display: none;">
         <option value="부위별">부위별</option>
         <option value="사고당시활동">사고당시활동</option>
         <option value="시간별">시간별</option>
@@ -47,57 +47,104 @@
             svg.selectAll("path")
                 .data(data.features)
                 .enter().append("path")
-                .attr("d", path);
+                .attr("d", path)
+                // 지도의 각 지역에 마우스 이벤트 핸들러 설정
+                .on("mouseover", handleMouseOver) // 마우스 오버 이벤트
+                .on("mouseout", handleMouseOut)   // 마우스 아웃 이벤트
+                .on("click", handleRegionClick);  // 지역 클릭 이벤트
         });
+
+        // 마우스 오버 이벤트 핸들러
+        function handleMouseOver(d) {
+        d3.select(this).style("stroke-width", "3");
+        }
+
+        // 마우스 아웃 이벤트 핸들러
+        function handleMouseOut(d) {
+        d3.select(this).style("stroke-width", "0.5");
+        }
+
+        // 지역 클릭 이벤트 핸들러
+        function handleRegionClick(d) {
+            const selectedRegion = d.properties.CTP_KOR_NM;
+            console.log(`선택된 지역: ${selectedRegion}`);
+            document.getElementById("categorySelect").style.display = "inline"; // 카테고리 선택 드롭다운 표시
+        }
+
+        // 색상 척도 설정 (보간 함수를 사용하여 세분화)
+        const colorScale = d3.scaleSequential(d3.interpolateReds);
+
+        // 지역명 매핑
+        const regionMapping = {
+            "서울특별시": "서울",
+            "부산광역시": "부산",
+            "대구광역시": "대구",
+            "인천광역시": "인천",
+            "광주광역시": "광주",
+            "대전광역시": "대전",
+            "울산광역시": "울산",
+            "세종특별자치시": "세종",
+            "경기도": "경기",
+            "강원도": "강원",
+            "충청북도": "충북",
+            "충청남도": "충남",
+            "전라북도": "전북",
+            "전라남도": "전남",
+            "경상북도": "경북",
+            "경상남도": "경남",
+            "제주특별자치도": "제주"
+        };
 
         // 연도 변경 시 기본 데이터 로드 함수
         function loadBaseData() {
-            const selectedYear = document.getElementById("yearSelect").value;
+            const selectedYear = document.getElementById("yearSelect").value || "2020"; // 기본 연도 설정
             const baseCsvFilePath = `${selectedYear}/${selectedYear}사고발생데이터_수정.csv`;
 
             d3.csv(baseCsvFilePath).then(data => {
-                baseData = data;
-                // 기본 데이터를 기반으로 한 시각화 업데이트 로직 (추후 추가)
-                updateVisualization();
-            });
-        }
-
-        // 색상 척도 설정
-        const colorScale = d3.scaleQuantize().range(d3.schemeBlues[9]);
-
-        // 카테고리 변경 시 시각화 업데이트 함수
-        function updateVisualization() {
-            const selectedYear = document.getElementById("yearSelect").value;
-            const selectedCategory = document.getElementById("categorySelect").value;
-            const categoryCsvFilePath = `${selectedYear}/${selectedCategory}_${selectedYear}년 학교안전사고 사고발생 현황.csv`;
-
-            // 선택된 카테고리와 연도에 따른 CSV 파일 로드
-            d3.csv(categoryCsvFilePath).then(data => {
-                // 지역별로 발생 카운트 집계
+                // 지역별 사고 발생 빈도 집계
                 const regionCounts = {};
+                let totalCount = 0; // 전체 발생 건수
+
                 data.forEach(d => {
-                    if (regionCounts[d.지역]) {
-                        regionCounts[d.지역]++;
-                    } else {
-                        regionCounts[d.지역] = 1;
+                    const region = d.지역;
+                    if (!regionCounts[region]) {
+                        regionCounts[region] = 0;
                     }
+                    regionCounts[region]++;
+                    totalCount++;
                 });
 
+                // 지역별 발생 건수의 비율 계산
+                const regionRatios = {};
+                for (const region in regionCounts) {
+                    regionRatios[region] = regionCounts[region] / totalCount;
+                }
+
                 // 색상 척도의 도메인 설정
-                const maxCount = Math.max(...Object.values(regionCounts));
-                colorScale.domain([0, maxCount]);
+                const maxRatio = Math.max(...Object.values(regionRatios));
+                colorScale.domain([0, maxRatio]);
 
                 // 지도의 색상 업데이트
                 svg.selectAll("path")
                     .style("fill", d => {
                         const regionName = d.properties.CTP_KOR_NM;
-                        return colorScale(regionCounts[regionName] || 0); // 해당 지역의 카운트에 따른 색상, 데이터가 없는 경우 0 처리
+                        const mappedRegion = regionMapping[regionName];
+                        const ratio = regionRatios[mappedRegion] || 0;
+                        //console.log(`지역: ${mappedRegion}, 발생 비율: ${ratio}`); // 콘솔에 지역별 사고 발생 비율 출력
+                        return colorScale(ratio); // 해당 지역의 사고 발생 비율에 따른 색상
                     });
             });
         }
 
         // 초기 데이터 로드
         loadBaseData();
+
+        // 카테고리 변경 시 시각화 업데이트 함수
+        function updateVisualization() {
+            const selectedYear = document.getElementById("yearSelect").value;
+            const selectedCategory = document.getElementById("categorySelect").value;
+            const categoryCsvFilePath = `${selectedYear}/${selectedCategory}_${selectedYear}년 학교안전사고 사고발생 현황.csv`;
+        }
 
     </script>
 </body>
