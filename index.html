@@ -7,8 +7,13 @@
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <style>
         /* 지도 스타일 */
-        path {
+        #map {
             stroke: white;
+            display: none;
+        }
+        /* 지도 스타일 */
+        lineChart {
+
         }
         /* 툴팁 스타일*/
         .tooltip {
@@ -27,11 +32,10 @@
             left: 10px;
             z-index: 10; /*지도 위에 표시*/
         }
-        #map, #barGraph, #pieChart {
-            display: inline-block; /* 옆으로 배열 */
-            vertical-align: top; /* 상단 정렬 */
-        }
         #visualizationContainer {
+            display: flex;
+            justify-content: space-between; /* 요소 사이에 공간 동일하게 */
+            align-items: flex-start; /* 상단 정렬 */
             margin-top: 40px; /* 드롭다운 아래에 위치하도록 여백 설정 */
         }
     </style>
@@ -48,12 +52,8 @@
     <div id="visualizationContainer">
         <!-- 지도를 그릴 SVG 영역 -->
         <svg width="800" height="600" id="map"></svg>
-    
-        <!-- 막대 그래프를 그릴 SVG 영역 -->
-        <svg width="400" height="400" id="barGraph"></svg>
-    
-        <!-- 원형 그래프를 그릴 SVG 영역 -->
-        <svg width="400" height="400" id="pieChart"></svg>
+        <!-- 라인 차트를 그릴 SVG 영역 -->
+        <svg width="500" height="600" id="lineChart"></svg>
     </div>
 
     <script>
@@ -68,13 +68,23 @@
         .style("border-radius", "6px")
         .style("border", "1px solid #ccc");
 
+        const lineChartSvg = d3.select("#lineChart");  // 라인 차트를 그릴 SVG 영역 선택
+
         const svg = d3.select("#map");
 
         let baseData = null; // 연도별 기본 데이터 저장 변수
-        let categoryData = null; // 카테고리별 데이터 저장 변수
+
+        const monthCounts = Array(12).fill(0);  // 각 전국 월별 카운트를 저장할 배열
+        const hourCounts = Array(24).fill(0);  // 각 전국 시간별 카운트를 저장할 배열
+        const localMonthCounts = Array(12).fill(0);  // 각 지역 월별 카운트를 저장할 배열
+        const localHourCounts = Array(24).fill(0);  // 각 지역 시간별 카운트를 저장할 배열
+        let localSelect = 0; // 0이 전국, 1이 지역별
+        let selectType = "월별"; // 월별, 시간별 두가지 토글형식
 
         // 대한민국 지도 데이터 로드
         d3.json("TL_SCCO_CTPRVN.json").then(data => {
+
+            baseData = data
             const projection = d3.geoMercator().fitSize([800, 600], data);
             const path = d3.geoPath().projection(projection);
 
@@ -110,16 +120,8 @@
             return tooltip.style("visibility", "hidden");
         }
 
-        // 지역 클릭 이벤트 핸들러
-        function handleRegionClick(d) {
-            const selectedRegion = d.properties.CTP_KOR_NM;
-            //console.log(`선택된 지역: ${selectedRegion}`);
-        }
-
         // 색상 척도 설정 (보간 함수를 사용하여 세분화)
         const colorScale = d3.scaleSequential(d3.interpolateReds);
-
-        const pieChartSvg = d3.select("#pieChart");
 
         // 지역명 매핑
         const regionMapping = {
@@ -148,26 +150,34 @@
             svg.selectAll("path")
             .style("fill", "#dcdcdc"); 
 
-            // 카테고리 선택 드롭다운 숨기기
-            document.getElementById("categorySelect").style.display = "none";
+            
 
             //차트 숨기기
-            pieChartSvg.selectAll('*').remove();
+            lineChartSvg.selectAll('*').remove();
         }
 
         // 연도 변경 시 기본 데이터 로드 함수
         function loadBaseData() {
             const selectedYear = document.getElementById("yearSelect").value;
-            
-            if (selectedYear === "선택") {
+            const svgElement = document.getElementById("map");
+
+            if (selectedYear !== "선택") {
+                svgElement.style.display = "block";  // 연도가 선택되면 SVG 표시
+
+            } else {
                 resetToInitialState(); // 초기 상태로 리셋
+                svgElement.style.display = "none";  // "선택"이 선택되면 SVG 숨김
                 return;
             }
-            //파일 읽어오기
-            const baseCsvFilePath = `${selectedYear}/${selectedYear}사고발생데이터_수정.csv`;   
+        
+            const baseCsvFilePath = `${selectedYear}/${selectedYear}사고발생데이터_수정.csv`;
+            monthCounts.fill(0);
+            hourCounts.fill(0);
+            localSelect = 0;
 
             d3.csv(baseCsvFilePath).then(data => {
                 baseData = data;
+        
                 // 지역별 사고 발생 빈도 집계
                 const regionCounts = {};
                 let totalCount = 0; // 전체 발생 건수
@@ -179,6 +189,12 @@
                     }
                     regionCounts[region]++;
                     totalCount++;
+        
+                    const month = +d.사고발생일.split("-")[1] - 1;  // 월 정보 추출 (0부터 시작)
+                    monthCounts[month]++;
+
+                    const hour = +d.사고발생시간.split(":")[0];  // 시간 정보만 추출
+                    hourCounts[hour]++;
                 });
 
                 // 지역별 발생 건수의 비율 계산
@@ -200,78 +216,202 @@
                         //console.log(`지역: ${mappedRegion}, 발생 비율: ${ratio}`); // 콘솔에 지역별 사고 발생 비율 출력
                         return colorScale(ratio); // 해당 지역의 사고 발생 비율에 따른 색상
                     });
+
+                // 월별 라인 차트 그리기
+                checkLineType(selectType);
             });
+        }
+
+        // 라인 차트 버튼 선택 여부
+        function checkLineType(selectType) {
+
+            if(selectType === "월별") {
+                if(localSelect == 0) {
+                    drawLineChart(monthCounts);
+                }
+                else if(localSelect == 1) {
+                    drawLineChart(localMonthCounts);
+                }
+            }
+            else if(selectType === "시간별") {
+                if(localSelect == 0) {
+                    drawLineChart(hourCounts);
+                }
+                else if(localSelect == 1) {
+                    drawLineChart(localHourCounts);
+                }
+            }
+        }
+
+        // 라인 차트를 그리는 함수
+        function drawLineChart(dataCounts, chartType) {
+            const lineChartSvg = d3.select("#lineChart");
+            lineChartSvg.selectAll('*').remove();
+            
+            const width = 500, height = 500;
+            const margin = {top: 20, right: 20, bottom: 50, left: 50};
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            let xScale, xLabels;
+            
+            if (dataCounts.length == '12') {
+                xScale = d3.scaleLinear().domain([1, 12]).range([0, chartWidth]);
+                xLabels = d => `${d}월`;
+            } else {
+                xScale = d3.scaleLinear().domain([0, 23]).range([0, chartWidth]);
+                xLabels = d => `${d}시`;
+            }
+        
+            const yScale = d3.scaleLinear().domain([0, d3.max(dataCounts)]).range([chartHeight, 0]);
+        
+            const line = d3.line()
+                .x((d, i) => xScale(i + 1))
+                .y(d => yScale(d));
+        
+            const chartGroup = lineChartSvg.append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+        
+            // X축 추가
+            chartGroup.append("g")
+                .attr("transform", `translate(0, ${chartHeight})`)
+                .call(d3.axisBottom(xScale).tickFormat(xLabels));
+        
+            // Y축 추가
+            chartGroup.append("g")
+                .call(d3.axisLeft(yScale));
+        
+            // 라인 그리기
+            chartGroup.append("path")
+                .datum(dataCounts)
+                .attr("fill", "none")
+                .attr("stroke", "blue")
+                .attr("stroke-width", 2)
+                .attr("d", line);
+        
+            // 데이터 포인트에 원 추가
+            chartGroup.selectAll("circle")
+                .data(dataCounts)
+                .enter()
+                .append("circle")
+                .attr("cx", (d, i) => xScale(i + 1))
+                .attr("cy", d => yScale(d))
+                .attr("r", 5)
+                .on("mouseover", function(d, i) {
+                    d3.select(this).attr("r", 7);
+                    tooltip.style("visibility", "visible")
+                        .text(`${xLabels(i + 1)}: ${d}건`)
+                        .style("top", (d3.event.pageY - 10) + "px")
+                        .style("left", (d3.event.pageX + 10) + "px");
+                })
+                .on("mouseout", function(d) {
+                    d3.select(this).attr("r", 5);
+                    tooltip.style("visibility", "hidden");
+                });
+
+            const buttonGroup = lineChartSvg.append("g")
+                .attr("transform", "translate(50,520)");  // 버튼의 위치 지정
+            
+            const buttonWidth = 80;  // 버튼의 너비
+            const buttonSpacing = 20;  // 버튼 간의 간격
+            const totalButtonWidth = 2 * buttonWidth + buttonSpacing;  // 두 버튼의 전체 너비
+            
+            const buttonStartX = (width - totalButtonWidth) / 2;  // 버튼 시작 위치 (정중앙으로 정렬)
+            
+            const buttons = lineChartSvg.selectAll('.button')
+                .data(['월별', '시간별'])
+                .enter()
+                .append('g')
+                .attr('class', 'button')
+                .attr('transform', (d, i) => `translate(${buttonStartX + i * (buttonWidth + buttonSpacing)}, 520)`);  // 버튼 위치 조정
+            
+                const rects = buttons.append('rect')
+                .attr('width', buttonWidth)
+                .attr('height', 30)
+                .attr('rx', 15)
+                .attr('ry', 15)
+                .attr('fill', '#ddd')
+                .attr('stroke', '#ddd')
+                .attr('stroke-width', '2');
+
+            // 마우스 오버/아웃 이벤트를 처리하는 함수
+            function handleMouseOver() {
+                d3.select(this.parentNode).select('rect').attr('stroke', 'blue');
+            }
+            
+            function handleMouseOut() {
+                d3.select(this.parentNode).select('rect').attr('stroke', '#ddd');
+            }
+            
+            // 이벤트를 사각형과 텍스트에 모두 연결
+            rects.on('mouseover', handleMouseOver)
+                 .on('mouseout', handleMouseOut);
+
+            // 이벤트를 사각형, 텍스트에 연결
+            rects.on('click', handleButtonClick);
+            buttons.select('text').on('click', handleButtonClick);
+            
+            buttons.append('text')
+                .attr('x', buttonWidth / 2)
+                .attr('y', 15)
+                .attr('text-anchor', 'middle')
+                .attr('dominant-baseline', 'central')
+                .text(d => d)
+                .on('mouseover', handleMouseOver)
+                .on('mouseout', handleMouseOut)
+                .on('click', handleButtonClick);
+
+            // 버튼 클릭 이벤트를 처리하는 함수
+            function handleButtonClick() {
+                let type;
+                // 클릭된 요소가 사각형인 경우 부모 g 요소의 텍스트 값을 가져옴
+                if (this.tagName === "rect") {
+                    type = d3.select(this.parentNode).select('text').text();
+                } else {
+                    type = d3.select(this).text();
+                }
+                updateChart(type);
+            }
+        }
+
+        function updateChart(type) {
+            if (type === "월별") {
+                selectType = type;
+                checkLineType(selectType);
+            } else if (type === "시간별") {
+                selectType = type;
+                checkLineType(selectType);
+            }
         }
 
         // 초기 데이터 로드
         loadBaseData();
 
-        // 지역 클릭 이벤트 핸들러
         function handleRegionClick(d) {
+            const selectedYear = document.getElementById("yearSelect").value;
+            localMonthCounts.fill(0);
+            localHourCounts.fill(0);
+            localSelect = 1;
+
+            if (selectedYear === "선택") {
+                return; // 연도가 선택되지 않았으면 함수를 종료
+            }
+
             const selectedRegion = d.properties.CTP_KOR_NM;
-
-            //console.log(`선택된 지역: ${selectedRegion}`);
-
-            // 해당 지역의 데이터 필터링
+        
+            // 해당 지역의 데이터만 필터링
             const regionData = baseData.filter(data => data.지역 === regionMapping[selectedRegion]);
+        
+            // 월별, 시간 데이터 집계
+            regionData.forEach(d => {
+                const month = +d.사고발생일.split("-")[1] - 1;
+                localMonthCounts[month]++;
 
-            // 남여 비율 계산
-            const genderCounts = { 남: 0, 여: 0 };
-            regionData.forEach(data => {
-                const gender = data.사고자성별;
-                genderCounts[gender]++;
+                const hour = +d.사고발생시간.split(":")[0];
+                localHourCounts[hour]++;
             });
             
-            //console.log(genderCounts); // 남여 카운트 결과를 콘솔에 출력
-
-            // 원형 그래프 업데이트
-            drawPieChart(genderCounts);
-        }
-
-        // 원형 차트를 그리는 함수
-        function drawPieChart(genderCounts) {
-            pieChartSvg.selectAll('*').remove();  // 이전 차트를 삭제
-
-            const pieData = [
-                { gender: '남', count: genderCounts.남 },
-                { gender: '여', count: genderCounts.여 }
-            ];
-
-            const pie = d3.pie().value(d => d.count);
-            const arc = d3.arc().innerRadius(0).outerRadius(150);
-
-            const g = pieChartSvg.append("g")
-                .attr("transform", "translate(200, 200)");
-
-            g.selectAll("path")
-                .data(pie(pieData))
-                .enter().append("path")
-                .attr("d", arc)
-                .attr("fill", d => d.data.gender === '남' ? "#4E79A7" : "#F28E2B")  // 남: 파란색, 여: 주황색
-                .attr("stroke", "white")
-                .attr("stroke-width", "2px");
-
-            // 범례 추가
-            const legend = pieChartSvg.append("g")
-                .attr("transform", "translate(150, 0)")
-                .selectAll(".legend")
-                .data(pieData)
-                .enter().append("g")
-                .attr("class", "legend")
-                .attr("transform", (d, i) => `translate(0,${i * 20})`);
-
-            legend.append("rect")
-                .attr("x", -18)
-                .attr("width", 18)
-                .attr("height", 18)
-                .attr("fill", d => d.gender === '남' ? "#4E79A7" : "#F28E2B");
-
-            legend.append("text")
-                .attr("x", -24)
-                .attr("y", 9)
-                .attr("dy", ".35em")
-                .style("text-anchor", "end")
-                .text(d => d.gender);
+            // 라인 차트 업데이트
+            checkLineType(selectType);
         }
 
     </script>
