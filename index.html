@@ -42,6 +42,18 @@
             align-items: flex-start; /* 상단 정렬 */
             margin-top: 40px; /* 드롭다운 아래에 위치하도록 여백 설정 */
         }
+        /* 반응형 스타일 */
+        #visualizationContainer svg {
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+        }
+
+        @media (max-width: 768px) {
+            #visualizationContainer {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -55,11 +67,11 @@
 
     <div id="visualizationContainer">
         <!-- 지도를 그릴 SVG 영역 -->
-        <svg width="800" height="600" id="map"></svg>
+        <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" id="map"></svg>
         <!-- 라인 차트를 그릴 SVG 영역 -->
-        <svg width="500" height="600" id="lineChart"></svg>
-        <!-- 스캐터 플롯을 그릴 SVG 영역 -->
-        <svg width="500" height="600" id="heatmap"></svg>
+        <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
+        <!-- 히트맵을 그릴 SVG 영역 -->
+        <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
     </div>
 
     <script>
@@ -86,6 +98,7 @@
         const localHourCounts = Array(24).fill(0);  // 각 지역 시간별 카운트를 저장할 배열
         let localSelect = 0; // 0이 전국, 1이 지역별
         let selectType = "월별"; // 월별, 시간별 두가지 토글형식
+        let regionData;
 
         // 대한민국 지도 데이터 로드
         d3.json("TL_SCCO_CTPRVN.json").then(data => {
@@ -227,7 +240,7 @@
                 checkLineType(selectType);
                 
                 // 시간, 장소 히트맵 그리기
-                drawHeatmap(data);
+                drawHeatmap(data, selectType);
             });
         }
 
@@ -379,67 +392,92 @@
                     type = d3.select(this).text();
                 }
                 updateChart(type);
+
+                if (localSelect == 0) { // 전국 데이터를 사용
+                    drawHeatmap(baseData, type);
+                } else if (localSelect == 1) { // 선택 지역의 데이터를 사용
+                    drawHeatmap(regionData, type);
+                }
             }
         }
 
         function updateChart(type) {
-            if (type === "월별") {
-                selectType = type;
-                checkLineType(selectType);
-            } else if (type === "시간별") {
-                selectType = type;
-                checkLineType(selectType);
-            }
+            selectType = type;
+            checkLineType(selectType);
         }
 
         // 히트맵을 그리는 함수
-        function drawHeatmap(data) {
+        function drawHeatmap(data, type) {
             const heatmapSvg = d3.select("#heatmap");
             heatmapSvg.selectAll('*').remove();
-
+        
             const margin = {top: 20, right: 20, bottom: 50, left: 50};
             const width = 500 - margin.left - margin.right;
             const height = 600 - margin.top - margin.bottom;
-
-            const places = ["운동장", "부속시설", "교실", "통로", "교외활동"];
-            const hours = Array.from({ length: 24 }, (_, i) => i);
-
-            const yScale = d3.scaleBand().domain(places).range([0, height]);
-            const xScale = d3.scaleBand().domain(hours).range([0, width]);
-
+            
+            let xScale, yScale, xLabels, yLabels;
             const counts = {}; // 빈도 집계를 위한 객체
-
-            data.forEach(d => {
-                const hour = +d.사고발생시간.split(":")[0];
-                const place = d.사고장소;
-                if (!counts[place]) {
-                    counts[place] = {};
-                }
-                if (!counts[place][hour]) {
-                    counts[place][hour] = 0;
-                }
-                counts[place][hour]++;
-            });
+        
+            // '사고장소'의 목록을 추출
+            yLabels = [...new Set(data.map(d => d.사고장소))];
+        
+            if (type === "월별") {
+                xLabels = Array.from({ length: 12 }, (_, i) => `${String(i + 1).padStart(2, '0')}월`); // 두 자리 숫자로 변경
+                
+                xScale = d3.scaleBand().domain(xLabels).range([0, width]);
+                yScale = d3.scaleBand().domain(yLabels).range([0, height]);
+            
+                data.forEach(d => {
+                    const month = d.사고발생일.split("-")[1];
+                    const place = d.사고장소;
+                    if (!counts[place]) {
+                        counts[place] = {};
+                    }
+                    if (!counts[place][month]) {
+                        counts[place][month] = 0;
+                    }
+                    counts[place][month]++;
+                });
+            } else if (type === "시간별") {
+                xLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}시`); // 두 자리 숫자로 변경
+                
+                xScale = d3.scaleBand().domain(xLabels).range([0, width]);
+                yScale = d3.scaleBand().domain(yLabels).range([0, height]);
+            
+                data.forEach(d => {
+                    const hour = d.사고발생시간.split(":")[0];
+                    const place = d.사고장소;
+                    if (!counts[place]) {
+                        counts[place] = {};
+                    }
+                    if (!counts[place][hour]) {
+                        counts[place][hour] = 0;
+                    }
+                    counts[place][hour]++;
+                });
+            }
 
             const maxCount = Math.max(...Object.values(counts).map(place => Math.max(...Object.values(place))));
-
             const colorScale = d3.scaleSequential(d3.interpolateOranges).domain([0, maxCount]);
 
             const chartGroup = heatmapSvg.append("g")
                 .attr("transform", `translate(${margin.left}, ${margin.top})`);
 
             chartGroup.selectAll('rect')
-                .data(hours.flatMap(hour => places.map(place => ({place, hour, count: counts[place][hour] || 0}))))
+                .data(xLabels.flatMap(label => yLabels.map(place => {
+                    const countKey = type === "월별" ? label.replace("월", "") : label.replace("시", "");
+                    return { place, label, count: counts[place][countKey] || 0 }
+                })))
                 .enter().append('rect')
-                .attr('x', d => xScale(d.hour))
+                .attr('x', d => xScale(d.label))
                 .attr('y', d => yScale(d.place))
                 .attr('width', xScale.bandwidth())
                 .attr('height', yScale.bandwidth())
                 .attr('fill', d => colorScale(d.count))
-                .attr('stroke', 'white')  // 내부 스트로크를 흰색
+                .attr('stroke', 'white')
                 .on("mouseover", function(d) {
                     tooltip.style("visibility", "visible")
-                        .text(`${d.place}, ${d.hour}시: ${d.count}건`)
+                        .text(`${d.place}, ${d.label}: ${d.count}건`)
                         .style("top", (d3.event.pageY - 30) + "px")
                         .style("left", (d3.event.pageX + 10) + "px");
                 })
@@ -477,7 +515,7 @@
             const selectedRegion = d.properties.CTP_KOR_NM;
         
             // 해당 지역의 데이터만 필터링
-            const regionData = baseData.filter(data => data.지역 === regionMapping[selectedRegion]);
+            regionData = baseData.filter(data => data.지역 === regionMapping[selectedRegion]);
         
             // 월별, 시간 데이터 집계
             regionData.forEach(d => {
@@ -492,7 +530,7 @@
             checkLineType(selectType);
 
             // 필터링된 데이터를 기반으로 히트맵 그리기
-            drawHeatmap(regionData);
+            drawHeatmap(regionData, selectType);
         }
 
     </script>
