@@ -11,9 +11,13 @@
             stroke: white;
             display: none;
         }
-        /* 지도 스타일 */
-        lineChart {
+        /* 라인차트 스타일 */
+        #lineChart {
 
+        }
+        /* 스캐터 플롯 스타일 */
+        #heatmap {
+            
         }
         /* 툴팁 스타일*/
         .tooltip {
@@ -54,6 +58,8 @@
         <svg width="800" height="600" id="map"></svg>
         <!-- 라인 차트를 그릴 SVG 영역 -->
         <svg width="500" height="600" id="lineChart"></svg>
+        <!-- 스캐터 플롯을 그릴 SVG 영역 -->
+        <svg width="500" height="600" id="heatmap"></svg>
     </div>
 
     <script>
@@ -219,6 +225,9 @@
 
                 // 월별 라인 차트 그리기
                 checkLineType(selectType);
+                
+                // 시간, 장소 히트맵 그리기
+                drawHeatmap(data);
             });
         }
 
@@ -383,6 +392,75 @@
             }
         }
 
+        // 히트맵을 그리는 함수
+        function drawHeatmap(data) {
+            const heatmapSvg = d3.select("#heatmap");
+            heatmapSvg.selectAll('*').remove();
+
+            const margin = {top: 20, right: 20, bottom: 50, left: 50};
+            const width = 500 - margin.left - margin.right;
+            const height = 600 - margin.top - margin.bottom;
+
+            const places = ["운동장", "부속시설", "교실", "통로", "교외활동"];
+            const hours = Array.from({ length: 24 }, (_, i) => i);
+
+            const yScale = d3.scaleBand().domain(places).range([0, height]);
+            const xScale = d3.scaleBand().domain(hours).range([0, width]);
+
+            const counts = {}; // 빈도 집계를 위한 객체
+
+            data.forEach(d => {
+                const hour = +d.사고발생시간.split(":")[0];
+                const place = d.사고장소;
+                if (!counts[place]) {
+                    counts[place] = {};
+                }
+                if (!counts[place][hour]) {
+                    counts[place][hour] = 0;
+                }
+                counts[place][hour]++;
+            });
+
+            const maxCount = Math.max(...Object.values(counts).map(place => Math.max(...Object.values(place))));
+
+            const colorScale = d3.scaleSequential(d3.interpolateOranges).domain([0, maxCount]);
+
+            const chartGroup = heatmapSvg.append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            chartGroup.selectAll('rect')
+                .data(hours.flatMap(hour => places.map(place => ({place, hour, count: counts[place][hour] || 0}))))
+                .enter().append('rect')
+                .attr('x', d => xScale(d.hour))
+                .attr('y', d => yScale(d.place))
+                .attr('width', xScale.bandwidth())
+                .attr('height', yScale.bandwidth())
+                .attr('fill', d => colorScale(d.count))
+                .attr('stroke', 'white')  // 내부 스트로크를 흰색
+                .on("mouseover", function(d) {
+                    tooltip.style("visibility", "visible")
+                        .text(`${d.place}, ${d.hour}시: ${d.count}건`)
+                        .style("top", (d3.event.pageY - 30) + "px")
+                        .style("left", (d3.event.pageX + 10) + "px");
+                })
+                .on("mouseout", function() {
+                    tooltip.style("visibility", "hidden");
+                });
+
+            // y축 (사고 장소)
+            chartGroup.append("g")
+                .call(d3.axisLeft(yScale).tickSize(0))
+                .selectAll("text")
+                .attr("fill", "black");  // y축의 글씨 색상을 검정
+
+            // x축 (시간)
+            chartGroup.append("g")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(xScale).tickSize(0))
+                .selectAll("text")
+                .attr("fill", "black");  // x축의 글씨 색상을 검정
+        }
+
         // 초기 데이터 로드
         loadBaseData();
 
@@ -410,8 +488,11 @@
                 localHourCounts[hour]++;
             });
             
-            // 라인 차트 업데이트
+            // 필터링된 데이터를 기반으로 라인 차트 업데이트
             checkLineType(selectType);
+
+            // 필터링된 데이터를 기반으로 히트맵 그리기
+            drawHeatmap(regionData);
         }
 
     </script>
