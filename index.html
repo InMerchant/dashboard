@@ -15,7 +15,7 @@
         #lineChart {
 
         }
-        /* 스캐터 플롯 스타일 */
+        /* 히트맵 스타일 */
         #heatmap {
             
         }
@@ -36,11 +36,13 @@
             left: 10px;
             z-index: 10; /*지도 위에 표시*/
         }
-        #visualizationContainer {
-            display: flex;
-            justify-content: space-between; /* 요소 사이에 공간 동일하게 */
-            align-items: flex-start; /* 상단 정렬 */
-            margin-top: 40px; /* 드롭다운 아래에 위치하도록 여백 설정 */
+        /* 바 차트 스타일 */
+        .bar {
+            fill-opacity: 0.7;
+        }
+
+        .bar:hover {
+            fill-opacity: 1;
         }
         /* 반응형 스타일 */
         #visualizationContainer svg {
@@ -65,14 +67,14 @@
         <option value="2022">2022</option>
     </select>
 
-    <div id="visualizationContainer">
-        <!-- 지도를 그릴 SVG 영역 -->
-        <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" id="map"></svg>
-        <!-- 라인 차트를 그릴 SVG 영역 -->
-        <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
-        <!-- 히트맵을 그릴 SVG 영역 -->
-        <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
-    </div>
+    <!-- 지도를 그릴 SVG 영역 -->
+    <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" id="map"></svg>
+    <!-- 라인 차트를 그릴 SVG 영역 -->
+    <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
+    <!-- 히트맵을 그릴 SVG 영역 -->
+    <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
+    <!-- 멀티플 바 차트 콘테이너 -->
+    <div id="barChartsContainer"></div>
 
     <script>
         // 툴팁 추가
@@ -87,8 +89,8 @@
         .style("border", "1px solid #ccc");
 
         const lineChartSvg = d3.select("#lineChart");  // 라인 차트를 그릴 SVG 영역 선택
-
-        const svg = d3.select("#map");
+        const heatmapSvg = d3.select("#heatmap"); // 히트맵 SVG 영역
+        const svg = d3.select("#map"); // 지도 SVG영역
 
         let baseData = null; // 연도별 기본 데이터 저장 변수
 
@@ -169,10 +171,9 @@
             svg.selectAll("path")
             .style("fill", "#dcdcdc"); 
 
-            
-
             //차트 숨기기
             lineChartSvg.selectAll('*').remove();
+            heatmapSvg.selectAll('*').remove();
         }
 
         // 연도 변경 시 기본 데이터 로드 함수
@@ -232,7 +233,7 @@
                         const regionName = d.properties.CTP_KOR_NM;
                         const mappedRegion = regionMapping[regionName];
                         const ratio = regionRatios[mappedRegion] || 0;
-                        //console.log(`지역: ${mappedRegion}, 발생 비율: ${ratio}`); // 콘솔에 지역별 사고 발생 비율 출력
+                        //console.log(`지역: ${mappedRegion}, 발생 비율: ${ratio}`);
                         return colorScale(ratio); // 해당 지역의 사고 발생 비율에 따른 색상
                     });
 
@@ -241,7 +242,63 @@
                 
                 // 시간, 장소 히트맵 그리기
                 drawHeatmap(data, selectType);
+
+                // 바 차트 그리기
+                renderBarChart(data)
             });
+        }
+
+        // 바 차트 그리기
+        function renderBarChart(data) {
+            const accidentParts = [...new Set(data.map(d => Object.keys(d)).flat())].filter(d => d !== "학교급" && d !== "사고자학년");
+
+            // 사고부위별 색상 스케일 생성
+            const colorScale = d3.scaleOrdinal()
+                .domain(accidentParts)
+                .range(d3.schemeCategory10);
+        
+            // SVG 컨테이너 생성
+            const svg = d3.select("#barChartsContainer").append("svg")
+                .attr("width", 800)
+                .attr("height", 500);
+        
+            // 스택 생성
+            const stack = d3.stack()
+                .keys(accidentParts);
+            
+            const series = stack(data);
+        
+            // 스케일 설정
+            const xScale = d3.scaleBand()
+                .domain(data.map(d => d.학교급))
+                .range([50, 750])
+                .padding(0.2);
+        
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(series, d => d3.max(d, d1 => d1[1]))])
+                .range([450, 50]);
+        
+            // 스택된 막대 생성
+            svg.selectAll("g")
+                .data(series)
+                .enter().append("g")
+                .attr("fill", d => colorScale(d.key))
+                .selectAll("rect")
+                .data(d => d)
+                .enter().append("rect")
+                .attr("x", (d, i) => xScale(data[i].학교급))
+                .attr("y", d => yScale(d[1]))
+                .attr("height", d => yScale(d[0]) - yScale(d[1]))
+                .attr("width", xScale.bandwidth());
+        
+            // 축 생성
+            svg.append("g")
+                .attr("transform", "translate(0," + 450 + ")")
+                .call(d3.axisBottom(xScale));
+        
+            svg.append("g")
+                .attr("transform", "translate(50,0)")
+                .call(d3.axisLeft(yScale));
         }
 
         // 라인 차트 버튼 선택 여부
@@ -408,7 +465,6 @@
 
         // 히트맵을 그리는 함수
         function drawHeatmap(data, type) {
-            const heatmapSvg = d3.select("#heatmap");
             heatmapSvg.selectAll('*').remove();
         
             const margin = {top: 20, right: 20, bottom: 50, left: 50};
@@ -502,6 +558,7 @@
         // 초기 데이터 로드
         loadBaseData();
 
+        //지도 속 지역 선택 이벤트 핸들러
         function handleRegionClick(d) {
             const selectedYear = document.getElementById("yearSelect").value;
             localMonthCounts.fill(0);
