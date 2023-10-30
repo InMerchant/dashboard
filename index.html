@@ -4,8 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>사고 데이터 시각화</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65" crossorigin="anonymous">
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <style>
+        #mainContainer {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        
+        #upperContainer, #lowerContainer {
+            display: flex;
+            flex: 1;
+            height: 50%;
+        }
+        
+        #mapContainer, #lineChartContainer, #heatmapContainer, #barChartContainer {
+            flex: 1;
+            width: 50%;
+        }
         /* 지도 스타일 */
         #map {
             stroke: white;
@@ -20,9 +39,9 @@
             
         }
         /* 툴팁 스타일*/
-        .tooltip {
+        .d3-tooltip {
             position: absolute;
-            z-index: 10;
+            z-index: 108000000;
             visibility: hidden;
             background: #ffffff;
             padding: 8px;
@@ -34,7 +53,7 @@
         #yearSelect {
             top: 10px;
             left: 10px;
-            z-index: 10; /*지도 위에 표시*/
+            z-index: 10;
         }
         /* 바 차트 스타일 */
         .bar {
@@ -59,38 +78,95 @@
     </style>
 </head>
 <body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXK/7HAuoJl+0I4" crossorigin="anonymous"></script>
     <!-- 연도 선택 드롭다운 -->
-    <select id="yearSelect" onchange="loadBaseData()">
-        <option value="선택">선택</option>
-        <option value="2020">2020</option>
-        <option value="2021">2021</option>
-        <option value="2022">2022</option>
-    </select>
+    <div class="dropdown">
+        <button class="btn btn-secondary dropdown-toggle" type="button" id="yearDropdownButton" data-bs-toggle="dropdown" aria-expanded="false">
+            연도 선택
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="yearDropdownButton">
+            <li><a class="dropdown-item" href="#" data-year="2020">2020</a></li>
+            <li><a class="dropdown-item" href="#" data-year="2021">2021</a></li>
+            <li><a class="dropdown-item" href="#" data-year="2022">2022</a></li>
+        </ul>
+    </div>
 
-    <!-- 지도를 그릴 SVG 영역 -->
-    <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet" id="map"></svg>
-    <!-- 라인 차트를 그릴 SVG 영역 -->
-    <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
-    <!-- 히트맵을 그릴 SVG 영역 -->
-    <svg viewBox="0 0 500 600" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
-    <!-- 멀티플 바 차트 콘테이너 -->
-    <div id="barChartsContainer"></div>
+    <div id="mainContainer">
+        <div id="upperContainer">
+            <div id="mapContainer">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Card title</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <!-- 지도 차트 -->
+                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="map"></svg>
+                    </div>
+                </div>
+            </div>
+            <div id="lineChartContainer">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Card title</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <!-- 라인 차트 -->
+                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="lowerContainer">
+            <div id="barChartContainer">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Card title</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <!-- 바 차트 -->
+                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="barChart"></svg>
+                    </div>
+                </div>
+            </div>
+            <div id="heatmapContainer">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Card title</h5>
+                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <!-- 히트맵 차트 -->
+                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
+        document.querySelector(".dropdown-menu").addEventListener("click", function(event) {
+            if (event.target && event.target.nodeName === "A") {
+                const selectedYear = event.target.getAttribute("data-year");
+                if (selectedYear) {
+                    // 선택된 연도를 버튼의 텍스트로 설정
+                    document.getElementById("yearDropdownButton").textContent = selectedYear;
+                    
+                    // loadBaseData 함수 호출
+                    loadBaseData(selectedYear);
+                }
+            }
+        });
+
         // 툴팁 추가
         const tooltip = d3.select("body").append("div")
-        .attr("class", "tooltip")
-        .style("position", "absolute")
-        .style("z-index", "10")
-        .style("visibility", "hidden")
-        .style("background", "#FFFFFF")
-        .style("padding", "8px")
-        .style("border-radius", "6px")
-        .style("border", "1px solid #ccc");
+            .attr("class", "d3-tooltip")
+            .style("position", "absolute")
+            .style("z-index", "108000000")
+            .style("visibility", "hidden")
+            .style("background", "#FFFFFF")
+            .style("padding", "8px")
+            .style("border-radius", "6px")
+            .style("border", "1px solid #ccc");
 
         const lineChartSvg = d3.select("#lineChart");  // 라인 차트를 그릴 SVG 영역 선택
         const heatmapSvg = d3.select("#heatmap"); // 히트맵 SVG 영역
         const svg = d3.select("#map"); // 지도 SVG영역
+        const barSvg = d3.select("#barChart");// 바 차트 SVG 영역
 
         let baseData = null; // 연도별 기본 데이터 저장 변수
 
@@ -106,7 +182,7 @@
         d3.json("TL_SCCO_CTPRVN.json").then(data => {
 
             baseData = data
-            const projection = d3.geoMercator().fitSize([800, 600], data);
+            const projection = d3.geoMercator().fitSize([600, 600], data);
             const path = d3.geoPath().projection(projection);
 
             svg.selectAll("path")
@@ -124,7 +200,7 @@
 
         // 마우스 오버 이벤트 핸들러
         function handleMouseOver(d) {
-            const selectedYear = document.getElementById("yearSelect").value;
+            const selectedYear = document.getElementById("yearDropdownButton").textContent;
             if (selectedYear === "선택") {
                 return; // 연도가 선택되지 않았으면 함수를 종료
             }
@@ -174,15 +250,19 @@
             //차트 숨기기
             lineChartSvg.selectAll('*').remove();
             heatmapSvg.selectAll('*').remove();
+            barSvg.selectAll('*').remove();
         }
 
         // 연도 변경 시 기본 데이터 로드 함수
         function loadBaseData() {
-            const selectedYear = document.getElementById("yearSelect").value;
+            const selectedYear = document.getElementById("yearDropdownButton").textContent;
             const svgElement = document.getElementById("map");
-
+            const mainContainerElement = document.getElementById("mainContainer");
+            
             if (selectedYear !== "선택") {
-                svgElement.style.display = "block";  // 연도가 선택되면 SVG 표시
+                // 연도가 선택되면 SVG 표시
+                mainContainerElement.style.display = "block";
+                svgElement.style.display = "block";
 
             } else {
                 resetToInitialState(); // 초기 상태로 리셋
@@ -244,61 +324,8 @@
                 drawHeatmap(data, selectType);
 
                 // 바 차트 그리기
-                renderBarChart(data)
+                renderStackedBarChart(data)
             });
-        }
-
-        // 바 차트 그리기
-        function renderBarChart(data) {
-            const accidentParts = [...new Set(data.map(d => Object.keys(d)).flat())].filter(d => d !== "학교급" && d !== "사고자학년");
-
-            // 사고부위별 색상 스케일 생성
-            const colorScale = d3.scaleOrdinal()
-                .domain(accidentParts)
-                .range(d3.schemeCategory10);
-        
-            // SVG 컨테이너 생성
-            const svg = d3.select("#barChartsContainer").append("svg")
-                .attr("width", 800)
-                .attr("height", 500);
-        
-            // 스택 생성
-            const stack = d3.stack()
-                .keys(accidentParts);
-            
-            const series = stack(data);
-        
-            // 스케일 설정
-            const xScale = d3.scaleBand()
-                .domain(data.map(d => d.학교급))
-                .range([50, 750])
-                .padding(0.2);
-        
-            const yScale = d3.scaleLinear()
-                .domain([0, d3.max(series, d => d3.max(d, d1 => d1[1]))])
-                .range([450, 50]);
-        
-            // 스택된 막대 생성
-            svg.selectAll("g")
-                .data(series)
-                .enter().append("g")
-                .attr("fill", d => colorScale(d.key))
-                .selectAll("rect")
-                .data(d => d)
-                .enter().append("rect")
-                .attr("x", (d, i) => xScale(data[i].학교급))
-                .attr("y", d => yScale(d[1]))
-                .attr("height", d => yScale(d[0]) - yScale(d[1]))
-                .attr("width", xScale.bandwidth());
-        
-            // 축 생성
-            svg.append("g")
-                .attr("transform", "translate(0," + 450 + ")")
-                .call(d3.axisBottom(xScale));
-        
-            svg.append("g")
-                .attr("transform", "translate(50,0)")
-                .call(d3.axisLeft(yScale));
         }
 
         // 라인 차트 버튼 선택 여부
@@ -327,17 +354,17 @@
             const lineChartSvg = d3.select("#lineChart");
             lineChartSvg.selectAll('*').remove();
             
-            const width = 500, height = 500;
+            const lineChartWidth = 600, lineChartHeight = 600;
             const margin = {top: 20, right: 20, bottom: 50, left: 50};
-            const chartWidth = width - margin.left - margin.right;
-            const chartHeight = height - margin.top - margin.bottom;
+            const chartWidth = lineChartWidth - margin.left - margin.right;
+            const chartHeight = lineChartHeight - margin.top - margin.bottom;
             let xScale, xLabels;
             
             if (dataCounts.length == '12') {
                 xScale = d3.scaleLinear().domain([1, 12]).range([0, chartWidth]);
                 xLabels = d => `${d}월`;
             } else {
-                xScale = d3.scaleLinear().domain([0, 23]).range([0, chartWidth]);
+                xScale = d3.scaleLinear().domain([0, 24]).range([0, chartWidth]);
                 xLabels = d => `${d}시`;
             }
         
@@ -388,22 +415,25 @@
                 });
 
             const buttonGroup = lineChartSvg.append("g")
-                .attr("transform", "translate(50,520)");  // 버튼의 위치 지정
+                .attr("transform", "translate(300,420)");  // 버튼의 위치 지정
             
+            // 버튼의 위치 지정에 관련된 상수들
+            const buttonGroupYPosition = lineChartHeight; // 버튼 그룹의 y 위치 조정
             const buttonWidth = 80;  // 버튼의 너비
             const buttonSpacing = 20;  // 버튼 간의 간격
             const totalButtonWidth = 2 * buttonWidth + buttonSpacing;  // 두 버튼의 전체 너비
-            
-            const buttonStartX = (width - totalButtonWidth) / 2;  // 버튼 시작 위치 (정중앙으로 정렬)
-            
+
+            // 버튼 시작 위치 (정중앙으로 정렬)
+            const buttonStartX = (lineChartWidth - totalButtonWidth) / 2 + 30;  
+
             const buttons = lineChartSvg.selectAll('.button')
                 .data(['월별', '시간별'])
                 .enter()
                 .append('g')
                 .attr('class', 'button')
-                .attr('transform', (d, i) => `translate(${buttonStartX + i * (buttonWidth + buttonSpacing)}, 520)`);  // 버튼 위치 조정
-            
-                const rects = buttons.append('rect')
+                .attr('transform', (d, i) => `translate(${buttonStartX + i * (buttonWidth + buttonSpacing)}, ${buttonGroupYPosition - 30})`);  // 버튼 위치 조정
+
+            const rects = buttons.append('rect')
                 .attr('width', buttonWidth)
                 .attr('height', 30)
                 .attr('rx', 15)
@@ -466,10 +496,12 @@
         // 히트맵을 그리는 함수
         function drawHeatmap(data, type) {
             heatmapSvg.selectAll('*').remove();
+
+            const heatmapWidth = 600, heatmapHeight = 600;
         
             const margin = {top: 20, right: 20, bottom: 50, left: 50};
-            const width = 500 - margin.left - margin.right;
-            const height = 600 - margin.top - margin.bottom;
+            const width = heatmapWidth - margin.left - margin.right;
+            const height = heatmapHeight - margin.top - margin.bottom;
             
             let xScale, yScale, xLabels, yLabels;
             const counts = {}; // 빈도 집계를 위한 객체
@@ -555,12 +587,125 @@
                 .attr("fill", "black");  // x축의 글씨 색상을 검정
         }
 
-        // 초기 데이터 로드
-        loadBaseData();
+        function renderStackedBarChart(data) {  
+
+            // 사고부위 리스트 추출
+            const accidentParts = [...new Set(data.map(d => d["사고부위"]))];
+        
+            // 데이터 집계
+            const aggregatedData = d3.nest()
+                .key(d => d["학교급"])
+                .key(d => d["사고자학년"])
+                .key(d => d["사고부위"])
+                .rollup(v => v.length)
+                .entries(data);
+        
+            const orderedDomain = [
+                '유치원 유아', '유치원 1학년', '유치원 2학년', '유치원 3학년', '유치원 ',
+                '초등학교 1학년', '초등학교 2학년', '초등학교 3학년', '초등학교 4학년', '초등학교 5학년', '초등학교 6학년', '초등학교 ','초등학교 유아', 
+                '중학교 1학년', '중학교 2학년', '중학교 3학년', '중학교 ', '중학교 유아', 
+                '고등학교 1학년', '고등학교 2학년', '고등학교 3학년', '고등학교 ', '고등학교 유아', 
+                '특수학교 1학년', '특수학교 2학년', '특수학교 3학년', '특수학교 4학년', '특수학교 5학년', '특수학교 6학년', '특수학교 ', '특수학교 유아', 
+                '기타학교 1학년', '기타학교 2학년', '기타학교 3학년', '기타학교 4학년', '기타학교 5학년', '기타학교 6학년', '기타학교 ', '기타학교 유아' 
+            ];
+
+            // 스택 형태로 데이터 변환
+            const stackedData = [];
+            aggregatedData.forEach(school => {
+                school.values.forEach(grade => {
+                    const tempData = {
+                        "학교급": school.key,
+                        "사고자학년": grade.key
+                    };
+                    accidentParts.forEach(part => {
+                        const found = grade.values.find(d => d.key === part);
+                        tempData[part] = found ? found.value : 0;
+                    });
+                    stackedData.push(tempData);
+                });
+            });
+        
+            // 사고부위별 색상 스케일 생성
+            const colorScale = d3.scaleOrdinal()
+                .domain(accidentParts)
+                .range(d3.schemeCategory10);
+        
+                barSvg.selectAll('*').remove();
+        
+            // 스택 생성
+            const stack = d3.stack()
+                .keys(accidentParts);
+            
+            const series = stack(stackedData);
+        
+            // 스케일 설정
+            const xScale = d3.scaleBand()
+                .domain(orderedDomain)
+                .range([60, 540])  // x축 시작 위치 조정
+                .padding(0.2);
+
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(series, d => d3.max(d, d1 => d1[1]))])
+                .range([540, 50]); // y축 범위 조정
+        
+            // 스택된 막대 생성
+            barSvg.selectAll("g")
+                .data(series)
+                .enter().append("g")
+                .attr("fill", d => colorScale(d.key))
+                .selectAll("rect")
+                .data(d => d)
+                .enter().append("rect")
+                .attr("x", (d, i) => xScale(stackedData[i]["학교급"] + " " + stackedData[i]["사고자학년"]))
+                .attr("y", d => yScale(d[1]))
+                .attr("height", d => yScale(d[0]) - yScale(d[1]))
+                .attr("width", xScale.bandwidth())
+                .attr("stroke", "#333")  // 스트로크 색상 추가
+                .attr("stroke-width", "0.5")  // 스트로크 너비 추가
+                .on("mouseover", function(d, i, nodes) {
+                    const accidentPart = nodes[i].parentNode.__data__.key;
+                    const content = `<strong>학교급:</strong> ${stackedData[i]["학교급"]}<br>
+                                                <strong>학년:</strong> ${stackedData[i]["사고자학년"]}<br>
+                                                <strong>사고 부위:</strong> ${accidentPart}<br>
+                                                <strong>사고 횟수:</strong> ${d[1] - d[0]}`;
+                    tooltip.html(content)
+                        .style("visibility", "visible");
+                    
+                    d3.select(this)
+                    .attr("stroke-width", "2")  // 강조된 스트로크 너비
+                    .attr("stroke", "#000");  // 강조된 스트로크 색상
+                })
+                .on("mousemove", function(d) {
+                    tooltip.style("top", (d3.event.pageY - 10) + "px")
+                        .style("left", (d3.event.pageX + 10) + "px");
+                })
+                .on("mouseout", function(d) {
+                    tooltip.style("visibility", "hidden");
+                    
+                    d3.select(this)
+                    .attr("stroke-width", "0.5")  // 원래 스트로크 너비로 복원
+                    .attr("stroke", "#333");  // 원래 스트로크 색상으로 복원
+                });
+        
+            // x축 생성
+            barSvg.append("g")
+                .attr("transform", "translate(0," + 540 + ")")
+                .call(d3.axisBottom(xScale))
+                .selectAll("text")
+                .style("text-anchor", "end")
+                .attr("dx", "-.5em")
+                .attr("dy", ".15em")
+                .attr("transform", "rotate(-45)");
+
+            // y축 생성
+            barSvg.append("g")
+                .attr("transform", "translate(60,0)")
+                .call(d3.axisLeft(yScale));
+        }
 
         //지도 속 지역 선택 이벤트 핸들러
         function handleRegionClick(d) {
-            const selectedYear = document.getElementById("yearSelect").value;
+            const selectedYear = document.getElementById("yearDropdownButton").textContent;
             localMonthCounts.fill(0);
             localHourCounts.fill(0);
             localSelect = 1;
@@ -588,6 +733,9 @@
 
             // 필터링된 데이터를 기반으로 히트맵 그리기
             drawHeatmap(regionData, selectType);
+
+            // 필터링된 데이터를 기반으로 막대차트 그리기
+            renderStackedBarChart(regionData)
         }
 
     </script>
