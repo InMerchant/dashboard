@@ -96,20 +96,20 @@
             <div id="mapContainer">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Card title</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <h5 class="card-title">전국 사고 빈도 지도</h5>
+                        <h6 id="regionSubtitle1" class="card-subtitle mb-2 text-muted">전국</h6>
                         <!-- 지도 차트 -->
-                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="map"></svg>
+                        <svg viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet" id="map"></svg>
                     </div>
                 </div>
             </div>
             <div id="lineChartContainer">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Card title</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <h5 class="card-title">(월별, 시간별) 라인 차트</h5>
+                        <h6 id="regionSubtitle2" class="card-subtitle mb-2 text-muted">전국 : 월별</h6>
                         <!-- 라인 차트 -->
-                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
+                        <svg viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet" id="lineChart"></svg>
                     </div>
                 </div>
             </div>
@@ -118,20 +118,20 @@
             <div id="barChartContainer">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Card title</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <h5 class="card-title">학년별 사고 부위별 막대 차트</h5>
+                        <h6 id="regionSubtitle3" class="card-subtitle mb-2 text-muted">전국</h6>
                         <!-- 바 차트 -->
-                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="barChart"></svg>
+                        <svg viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet" id="barChart"></svg>
                     </div>
                 </div>
             </div>
             <div id="heatmapContainer">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title">Card title</h5>
-                        <h6 class="card-subtitle mb-2 text-muted">Card subtitle</h6>
+                        <h5 class="card-title">(월별, 시간별) 사고 장소별 히트맵</h5>
+                        <h6 id="regionSubtitle4" class="card-subtitle mb-2 text-muted">전국 : 월별</h6>
                         <!-- 히트맵 차트 -->
-                        <svg viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
+                        <svg viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet" id="heatmap"></svg>
                     </div>
                 </div>
             </div>
@@ -177,12 +177,13 @@
         let localSelect = 0; // 0이 전국, 1이 지역별
         let selectType = "월별"; // 월별, 시간별 두가지 토글형식
         let regionData;
+        let card_title_data;
 
         // 대한민국 지도 데이터 로드
         d3.json("TL_SCCO_CTPRVN.json").then(data => {
 
             baseData = data
-            const projection = d3.geoMercator().fitSize([600, 600], data);
+            const projection = d3.geoMercator().fitSize([600, 300], data);
             const path = d3.geoPath().projection(projection);
 
             svg.selectAll("path")
@@ -263,7 +264,17 @@
                 // 연도가 선택되면 SVG 표시
                 mainContainerElement.style.display = "block";
                 svgElement.style.display = "block";
-
+                // 지역 이름으로 헤더 변경
+                document.getElementById("regionSubtitle1").textContent = '전국';
+                document.getElementById("regionSubtitle3").textContent = '전국';
+                if(selectType === '월별') {
+                    document.getElementById("regionSubtitle2").textContent = '전국 : 월별';
+                    document.getElementById("regionSubtitle4").textContent = '전국 : 월별';
+                }
+                else if(selectType === '시간별') {
+                    document.getElementById("regionSubtitle2").textContent = '전국 : 시간별';
+                    document.getElementById("regionSubtitle4").textContent = '전국 : 시간별';
+                }
             } else {
                 resetToInitialState(); // 초기 상태로 리셋
                 svgElement.style.display = "none";  // "선택"이 선택되면 SVG 숨김
@@ -327,24 +338,32 @@
                 renderStackedBarChart(data)
             });
         }
-
+        
         // 라인 차트 버튼 선택 여부
         function checkLineType(selectType) {
 
             if(selectType === "월별") {
                 if(localSelect == 0) {
                     drawLineChart(monthCounts);
+                    document.getElementById("regionSubtitle2").textContent = '전국 : 월별';
+                    document.getElementById("regionSubtitle4").textContent = '전국 : 월별';
                 }
                 else if(localSelect == 1) {
                     drawLineChart(localMonthCounts);
+                    document.getElementById("regionSubtitle2").textContent = card_title_data + ' : 월별';
+                    document.getElementById("regionSubtitle4").textContent = card_title_data + ' : 월별';
                 }
             }
             else if(selectType === "시간별") {
                 if(localSelect == 0) {
                     drawLineChart(hourCounts);
+                    document.getElementById("regionSubtitle2").textContent = '전국 : 시간별';
+                    document.getElementById("regionSubtitle4").textContent = '전국 : 시간별';
                 }
                 else if(localSelect == 1) {
                     drawLineChart(localHourCounts);
+                    document.getElementById("regionSubtitle2").textContent = card_title_data + ' : 시간별';
+                    document.getElementById("regionSubtitle4").textContent = card_title_data + ' : 시간별';
                 }
             }
         }
@@ -354,7 +373,7 @@
             const lineChartSvg = d3.select("#lineChart");
             lineChartSvg.selectAll('*').remove();
             
-            const lineChartWidth = 600, lineChartHeight = 600;
+            const lineChartWidth = 600, lineChartHeight = 300;
             const margin = {top: 20, right: 20, bottom: 50, left: 50};
             const chartWidth = lineChartWidth - margin.left - margin.right;
             const chartHeight = lineChartHeight - margin.top - margin.bottom;
@@ -497,7 +516,7 @@
         function drawHeatmap(data, type) {
             heatmapSvg.selectAll('*').remove();
 
-            const heatmapWidth = 600, heatmapHeight = 600;
+            const heatmapWidth = 600, heatmapHeight = 300;
         
             const margin = {top: 20, right: 20, bottom: 50, left: 50};
             const width = heatmapWidth - margin.left - margin.right;
@@ -591,22 +610,47 @@
 
             // 사고부위 리스트 추출
             const accidentParts = [...new Set(data.map(d => d["사고부위"]))];
-        
+
             // 데이터 집계
             const aggregatedData = d3.nest()
                 .key(d => d["학교급"])
-                .key(d => d["사고자학년"])
+                .key(d => {
+                    // 유치원 학년 통합 및 이름 변경
+                    if (d["학교급"] === "유치원") {
+                        if (["1학년", "2학년", "3학년", "유아"].includes(d["사고자학년"])) {
+                            return "유아";
+                        } else {
+                            return "기타";
+                        }
+                    }
+                    // 초등학교, 중학교, 고등학교, 특수학교, 기타학교 학년 통합
+                    if (["초등학교", "중학교", "고등학교", "특수학교", "기타학교"].includes(d["학교급"])) {
+                        if (d["사고자학년"] === "유아" || d["사고자학년"] === "") {
+                            return "기타";
+                        }
+                    }
+                    // 특수학교 및 기타학교 학년 통합
+                    if (d["학교급"] === "특수학교" || d["학교급"] === "기타학교") {
+                        if (["1학년", "2학년", "3학년", "4학년", "5학년", "6학년"].includes(d["사고자학년"])) {
+                            return "전학년";
+                        } else if (d["사고자학년"] === "유아" || d["사고자학년"] === "") {
+                            return d["학교급"] + " 기타";
+                        }
+                    }
+                    return d["사고자학년"];
+                })
                 .key(d => d["사고부위"])
                 .rollup(v => v.length)
                 .entries(data);
-        
+
+            // orderedDomain 업데이트
             const orderedDomain = [
-                '유치원 유아', '유치원 1학년', '유치원 2학년', '유치원 3학년', '유치원 ',
-                '초등학교 1학년', '초등학교 2학년', '초등학교 3학년', '초등학교 4학년', '초등학교 5학년', '초등학교 6학년', '초등학교 ','초등학교 유아', 
-                '중학교 1학년', '중학교 2학년', '중학교 3학년', '중학교 ', '중학교 유아', 
-                '고등학교 1학년', '고등학교 2학년', '고등학교 3학년', '고등학교 ', '고등학교 유아', 
-                '특수학교 1학년', '특수학교 2학년', '특수학교 3학년', '특수학교 4학년', '특수학교 5학년', '특수학교 6학년', '특수학교 ', '특수학교 유아', 
-                '기타학교 1학년', '기타학교 2학년', '기타학교 3학년', '기타학교 4학년', '기타학교 5학년', '기타학교 6학년', '기타학교 ', '기타학교 유아' 
+                '유치원 유아', '유치원 기타',
+                '초등학교 1학년', '초등학교 2학년', '초등학교 3학년', '초등학교 4학년', '초등학교 5학년', '초등학교 6학년', '초등학교 기타',
+                '중학교 1학년', '중학교 2학년', '중학교 3학년', '중학교 기타',
+                '고등학교 1학년', '고등학교 2학년', '고등학교 3학년', '고등학교 기타',
+                '특수학교 전학년', '특수학교 기타',
+                '기타학교 전학년', '기타학교 기타'
             ];
 
             // 스택 형태로 데이터 변환
@@ -646,7 +690,7 @@
 
             const yScale = d3.scaleLinear()
                 .domain([0, d3.max(series, d => d3.max(d, d1 => d1[1]))])
-                .range([540, 50]); // y축 범위 조정
+                .range([240, 50]); // y축 범위 조정
         
             // 스택된 막대 생성
             barSvg.selectAll("g")
@@ -689,7 +733,7 @@
         
             // x축 생성
             barSvg.append("g")
-                .attr("transform", "translate(0," + 540 + ")")
+                .attr("transform", "translate(0," + 240 + ")")
                 .call(d3.axisBottom(xScale))
                 .selectAll("text")
                 .style("text-anchor", "end")
@@ -715,7 +759,21 @@
             }
 
             const selectedRegion = d.properties.CTP_KOR_NM;
+            card_title_data = d.properties.CTP_KOR_NM;
         
+            // 지역 이름으로 헤더 변경
+            document.getElementById("regionSubtitle1").textContent = selectedRegion;
+            document.getElementById("regionSubtitle3").textContent = selectedRegion;
+            if(selectType === '월별') {
+                document.getElementById("regionSubtitle2").textContent = selectedRegion + ' : 월별';
+                document.getElementById("regionSubtitle4").textContent = selectedRegion + ' : 월별';
+            }
+            else if(selectType === '시간별') {
+                document.getElementById("regionSubtitle2").textContent = selectedRegion + ' : 시간별';
+                document.getElementById("regionSubtitle4").textContent = selectedRegion + ' : 시간별';
+            }
+
+
             // 해당 지역의 데이터만 필터링
             regionData = baseData.filter(data => data.지역 === regionMapping[selectedRegion]);
         
